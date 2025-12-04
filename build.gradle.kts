@@ -55,7 +55,9 @@ dependencies {
     // TFLite 依赖 (用于模型推理)
     implementation("org.tensorflow:tensorflow-lite:2.15.0")
 
-    // 【新增】Apache Commons Math 依赖 (用于复杂的数学和信号处理，例如 FFT)
+    // 【新增】用于 561 维特征提取的数学库（FFT、统计量）
+    implementation("org.apache.commons:commons-math3:3.6.1")
+
     implementation("org.apache.commons:commons-math3:3.6.1")
     implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.23")
 
