@@ -41,7 +41,7 @@ class SensorService : Service(), SensorEventListener {
     )
     private var latestData = SensorData(0f, 0f, 0f, 0f, 0f, 0f)
 
-    // TFLite 模型推理和特征提取的处理器（简化版）
+    // TFLite 模型推理和特征提取的处理器（现在使用非简化版）
     private lateinit var harProcessor: HarProcessor
 
     override fun onCreate() {
@@ -167,63 +167,5 @@ class SensorService : Service(), SensorEventListener {
 
     override fun onBind(intent: Intent?): IBinder? {
         return null
-    }
-}
-
-/**
- * 简化版 HAR 数据处理器
- * 在实际应用中，这里需要实现 561 维特征提取和 TFLite 模型加载/推理。
- */
-class HarProcessor(private val context: Context) {
-    // 存储传感器数据，用于窗口切分和特征提取
-    private val dataBuffer = mutableListOf<SensorService.SensorData>()
-    private val windowSize = 128 // 128个样本，对应 2.56 秒 @ 50Hz
-
-    // 当前识别结果
-    var currentActivity: String = "未启动"
-
-    /**
-     * TFLite 模型推理的占位符方法。
-     * 实际实现：加载 TFLite 模型并传入 561 维特征向量，返回识别结果。
-     */
-    private fun runModelInference(features: FloatArray): String {
-        // TODO: 实际应用中，这里应加载 har_model.tflite 并进行推理
-
-        // 简化规则识别（仅用于演示）：根据加速度大小判断
-        val accMagnitude = sqrt(features[0] * features[0] + features[1] * features[1] + features[2] * features[2])
-        return when {
-            accMagnitude > 15 -> "跑步/跳跃"
-            accMagnitude > 10 -> "走路"
-            accMagnitude > 9.5 && accMagnitude < 10.5 -> "站立/静止"
-            else -> "未知活动"
-        }
-    }
-
-    /**
-     * 实时接收和处理传感器数据
-     */
-    fun processData(data: SensorService.SensorData) {
-        dataBuffer.add(data)
-
-        // 模拟 50% 重叠的滑动窗口 (每 64 个新样本处理一次)
-        if (dataBuffer.size >= windowSize) {
-
-            // 1. 模拟特征提取 (使用窗口内 128 个样本的平均值作为简化特征)
-            val meanAccX = dataBuffer.map { it.accX }.average().toFloat()
-            val meanAccY = dataBuffer.map { it.accY }.average().toFloat()
-            val meanAccZ = dataBuffer.map { it.accZ }.average().toFloat()
-
-            // 实际应用中，需要实现所有 561 个特征的计算！
-            val simplifiedFeatures = floatArrayOf(meanAccX, meanAccY, meanAccZ)
-
-            // 2. 模型推理
-            currentActivity = runModelInference(simplifiedFeatures)
-
-            // 3. 滑动窗口: 移除前 64 个样本
-            val overlap = windowSize / 2
-            for (i in 0 until overlap) {
-                dataBuffer.removeAt(0)
-            }
-        }
     }
 }
