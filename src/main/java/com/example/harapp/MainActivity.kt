@@ -14,6 +14,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import android.widget.EditText // 新增引入
 
 /**
  * MainActivity 负责 UI 交互、权限管理和启动/停止 SensorService。
@@ -27,8 +28,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvSamplingRate: TextView
     private lateinit var btnStartService: Button
     private lateinit var btnStopService: Button
-    // 【新增】数据导出按钮
     private lateinit var btnExportData: Button
+    private lateinit var etCustomLabel: EditText
+    // 【新增】波形视图实例
+    private lateinit var waveformView: WaveformView
 
     private var isServiceRunning = false
 
@@ -42,11 +45,10 @@ class MainActivity : AppCompatActivity() {
     private val sensorDataReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_SENSOR_UPDATE) {
-                // 【新增】处理数据保存状态反馈
+                // ... (处理保存状态反馈, 保持不变)
                 val saveStatus = intent.getStringExtra("SAVE_STATUS")
                 if (saveStatus == "SUCCESS") {
                     val filePath = intent.getStringExtra("FILE_PATH")
-                    // 提示用户文件保存的位置
                     Toast.makeText(context, "数据保存成功，位于: ${filePath?.substringAfterLast('/')}", Toast.LENGTH_LONG).show()
                 } else if (saveStatus == "FAILURE") {
                     val message = intent.getStringExtra("MESSAGE") ?: "写入文件失败。"
@@ -64,14 +66,16 @@ class MainActivity : AppCompatActivity() {
                 val gyroFreq = intent.getFloatExtra("GYRO_FREQ", 0f)
                 val activity = intent.getStringExtra("ACTIVITY") ?: "未知"
 
+                // 【新增】将加速度计数据传递给 WaveformView 进行绘制
+                waveformView.addData(accX, accY, accZ)
+
                 // 更新 UI
                 tvAccData.text = String.format("加速度 (m/s²): X=%.2f, Y=%.2f, Z=%.2f", accX, accY, accZ)
                 tvGyroData.text = String.format("角速度 (rad/s): X=%.2f, Y=%.2f, Z=%.2f", gyroX, gyroY, gyroZ)
                 tvSamplingRate.text = String.format("实际频率: Acc=%.2f Hz, Gyro=%.2f Hz", accFreq, gyroFreq)
                 tvCurrentActivity.text = activity
 
-                // 根据活动调整颜色 (简单图形化反馈)
-                // 【修改】使用 substringBefore(' ') 来处理模型输出中可能包含的置信度，以便进行颜色匹配。
+                // 根据活动调整颜色 (保持不变)
                 when (activity.substringBefore(' ')) {
                     "WALKING", "走路" -> tvCurrentActivity.setTextColor(ContextCompat.getColor(context!!, android.R.color.holo_blue_dark))
                     "WALKING_UPSTAIRS", "WALKING_DOWNSTAIRS" -> tvCurrentActivity.setTextColor(ContextCompat.getColor(context!!, android.R.color.holo_blue_light))
@@ -94,10 +98,12 @@ class MainActivity : AppCompatActivity() {
         tvSamplingRate = findViewById(R.id.tv_sampling_rate)
         btnStartService = findViewById(R.id.btn_start_service)
         btnStopService = findViewById(R.id.btn_stop_service)
-        // 【新增】初始化数据导出按钮
         btnExportData = findViewById(R.id.btn_export_data)
+        etCustomLabel = findViewById(R.id.et_custom_label)
+        // 【新增】初始化波形视图
+        waveformView = findViewById(R.id.waveform_view)
 
-        // 设置按钮点击事件
+        // 设置按钮点击事件 (保持不变)
         btnStartService.setOnClickListener {
             if (checkPermissions()) {
                 startSensorService()
@@ -110,7 +116,6 @@ class MainActivity : AppCompatActivity() {
             stopSensorService()
         }
 
-        // 【新增】设置数据导出按钮点击事件
         btnExportData.setOnClickListener {
             exportCollectedData()
         }
@@ -118,30 +123,20 @@ class MainActivity : AppCompatActivity() {
         updateButtonsState()
     }
 
-    // 【最终修复】应用 LINT 抑制，解决 RECEIVER_EXPORTED/NOT_EXPORTED 标志缺失的报错
-    // "InlinedApi" 抑制对 Context.RECEIVER_NOT_EXPORTED 的常量引用的兼容性报错。
-    // "UnspecifiedRegisterReceiverFlag" 抑制 LINT 对 2 参数 registerReceiver 的警告。
+    // 【最终修复】应用 LINT 抑制 (保持不变)
     @Suppress("InlinedApi", "UnspecifiedRegisterReceiverFlag", "DEPRECATION")
     override fun onResume() {
         super.onResume()
-        // 注册广播接收器，用于接收传感器数据更新
         val filter = IntentFilter(ACTION_SENSOR_UPDATE)
-
-        // API 兼容性处理
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Android 13 (API 33) 及以上：使用新的 3 参数方法。
-            // Context.RECEIVER_NOT_EXPORTED 是 API 33 引入的常量，用于私有广播，是最佳安全实践。
             registerReceiver(sensorDataReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
-            // Android 12 (API 32) 及以下：使用兼容的 2 参数方法。
-            // LINT 警告被 @Suppress 注解在方法级别抑制。
             registerReceiver(sensorDataReceiver, filter)
         }
     }
 
     override fun onPause() {
         super.onPause()
-        // 取消注册广播接收器
         unregisterReceiver(sensorDataReceiver)
     }
 
@@ -151,10 +146,12 @@ class MainActivity : AppCompatActivity() {
     private fun startSensorService() {
         if (!isServiceRunning) {
             val intent = Intent(this, SensorService::class.java)
-            // 启动前台服务以确保后台持续运行 (在 Android O+ 需要)
+            val customLabel = etCustomLabel.text.toString().trim()
+            intent.putExtra("CUSTOM_LABEL", if (customLabel.isNotEmpty()) customLabel else "未命名活动")
+
             ContextCompat.startForegroundService(this, intent)
             isServiceRunning = true
-            Toast.makeText(this, "50Hz 传感器服务已启动", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "50Hz 传感器服务已启动，标签: ${intent.getStringExtra("CUSTOM_LABEL")}", Toast.LENGTH_LONG).show()
             updateButtonsState()
         }
     }
@@ -175,11 +172,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 【新增】发送指令给 SensorService 导出数据
+     * 发送指令给 SensorService 导出数据
      */
     private fun exportCollectedData() {
         if (isServiceRunning) {
-            // 检查是否有数据可以导出
             if (SensorService.collectedData.isEmpty()) {
                 Toast.makeText(this, "当前缓冲区没有采集到的数据。", Toast.LENGTH_SHORT).show()
                 return
@@ -188,7 +184,6 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(this, SensorService::class.java).apply {
                 action = SensorService.ACTION_SAVE_DATA
             }
-            // 通过发送一个带 action 的 Intent 来触发 SensorService 中的数据保存逻辑
             startService(intent)
             Toast.makeText(this, "正在导出数据，请稍候...", Toast.LENGTH_SHORT).show()
         } else {
@@ -197,19 +192,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 检查所需的权限 (例如后台服务运行)
+     * 检查所需的权限 (保持不变)
      */
     private fun checkPermissions(): Boolean {
-        // 在 Android 14+ 检查 POST_NOTIFICATIONS 权限
         return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         } else {
-            true // 旧版本无需权限
+            true
         }
     }
 
     /**
-     * 请求权限
+     * 请求权限 (保持不变)
      */
     private fun requestPermissions() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -219,7 +213,6 @@ class MainActivity : AppCompatActivity() {
                 PERMISSION_REQUEST_CODE
             )
         }
-        // 如果是 Android Q+，启动前台服务还需要额外的权限，但通常在 Manifest 中声明即可。
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -239,7 +232,6 @@ class MainActivity : AppCompatActivity() {
     private fun updateButtonsState() {
         btnStartService.isEnabled = !isServiceRunning
         btnStopService.isEnabled = isServiceRunning
-        // 【修改】导出按钮只有在服务运行时才启用
         btnExportData.isEnabled = isServiceRunning
     }
 }

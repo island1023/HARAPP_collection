@@ -54,6 +54,9 @@ class SensorService : Service(), SensorEventListener {
     // TFLite 模型推理和特征提取的处理器（现在使用非简化版）
     private lateinit var harProcessor: HarProcessor
 
+    // 【新增】用于存储当前采集周期的自定义标签
+    private var currentCustomLabel: String? = null
+
     /**
      * 【新增】静态数据缓冲区和导出动作常量
      */
@@ -82,6 +85,9 @@ class SensorService : Service(), SensorEventListener {
             // 如果只是导出数据，保持服务运行状态
             return START_STICKY
         }
+
+        // 【修改】接收自定义标签，仅在启动服务（非导出）时更新
+        currentCustomLabel = intent?.getStringExtra("CUSTOM_LABEL")
 
         registerSensors()
         // 【新增】在服务启动时清空旧数据，开始新的采集周期
@@ -161,19 +167,24 @@ class SensorService : Service(), SensorEventListener {
         // 3. 将数据传递给处理器和主界面
         harProcessor.processData(latestData)
 
-        // 【新增】将原始数据和活动标签添加到缓冲区
-        // 记录原始数据 + 活动标签
+        // 【修改】确定用于数据采样的标签：优先使用自定义标签，否则使用模型识别结果
+        val labelForData = currentCustomLabel ?: harProcessor.currentActivity.substringBefore(' ')
+
+        // 【修改】将原始数据和活动标签添加到缓冲区
         collectedData.add(
             RawSensorData(
                 timestampMs = currentTimestampMs,
                 accX = latestData.accX, accY = latestData.accY, accZ = latestData.accZ,
                 gyroX = latestData.gyroX, gyroY = latestData.gyroY, gyroZ = latestData.gyroZ,
-                // 仅记录活动名称（去除置信度百分比和/或规则标记）
-                activityLabel = harProcessor.currentActivity.substringBefore(' ')
+                activityLabel = labelForData // 使用确定的标签
             )
         )
 
         sendBroadcastToActivity()
+
+        // 重置计数器以持续测量
+        if (accCount > 100) { accCount = 0; accTotalDelta = 0L; }
+        if (gyroCount > 100) { gyroCount = 0; gyroTotalDelta = 0L; }
     }
 
     private fun sendBroadcastToActivity() {
