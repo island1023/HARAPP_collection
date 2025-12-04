@@ -55,6 +55,10 @@ dependencies {
     // TFLite 依赖 (用于模型推理)
     implementation("org.tensorflow:tensorflow-lite:2.15.0")
 
+    // 【新增】Apache Commons Math 依赖 (用于复杂的数学和信号处理，例如 FFT)
+    implementation("org.apache.commons:commons-math3:3.6.1")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.23")
+
     // ------------------- 移除所有 Compose 依赖 -------------------
     // implementation(libs.androidx.activity.compose)
     // implementation(platform(libs.androidx.compose.bom))
