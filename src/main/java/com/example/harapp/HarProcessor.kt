@@ -8,16 +8,19 @@ import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 import kotlin.math.sqrt
 import kotlin.collections.List
-import kotlin.collections.MutableList
+import kotlin.collections.MutableList // 确保 MutableList 也被导入
+import kotlin.math.atan2
+import kotlin.math.PI
+import kotlin.math.coerceIn // 【修复 Unresolved reference 'coerceIn' 的关键导入】
 
 /**
  * [非简化版] HAR 数据处理器
  * 实现了基于 UCI HAR 数据集标准的特征提取前置步骤 (重力分离、Jerk信号计算)
- * 并返回一个 561 维特征向量。
+ * 并在结构上尽可能完善了 561 维特征提取逻辑。
  *
- * 注意: 完整的 561 维特征提取涉及复杂的数学运算（如 3阶Butterworth低通滤波和FFT），
- * 此处我们提供了结构，并使用一阶低通滤波器作为重力分离的【示例】。
- * 您需要用完整的信号处理代码替换带有 "TODO: COMPLETE XXXXX" 的部分。
+ * TODO: 您仍需要引入一个专业的数学库（如 Apache Commons Math）来完成：
+ * 1. 完整的 3rd-order Butterworth 低通滤波实现。
+ * 2. 快速傅里叶变换 (FFT) 及其相关特征（频域特征）的计算。
  */
 class HarProcessor(private val context: Context) {
 
@@ -108,7 +111,8 @@ class HarProcessor(private val context: Context) {
     }
 
     /**
-     * [TODO: 关键步骤] 实现完整的 561 维特征提取逻辑。
+     * [关键步骤] 实现完整的 561 维特征提取逻辑。
+     * 当前已实现了主要时域信号的 Mean, StdDev, Max, Min, Energy 计算。
      */
     private fun extractFeatures(buffer: List<ProcessedSensorData>): FloatArray {
         // 确保返回 561 维特征向量，以匹配 TFLite 模型输入
@@ -116,12 +120,10 @@ class HarProcessor(private val context: Context) {
         var featureIndex = 0
 
         // 1. Jerk 信号计算 (加速度和陀螺仪的导数)
-        // tBodyAccJerk-XYZ
         val jerkAccX = calculateJerk(buffer.map { it.bodyAccX })
         val jerkAccY = calculateJerk(buffer.map { it.bodyAccY })
         val jerkAccZ = calculateJerk(buffer.map { it.bodyAccZ })
 
-        // tBodyGyroJerk-XYZ
         val jerkGyroX = calculateJerk(buffer.map { it.gyroX })
         val jerkGyroY = calculateJerk(buffer.map { it.gyroY })
         val jerkGyroZ = calculateJerk(buffer.map { it.gyroZ })
@@ -154,29 +156,47 @@ class HarProcessor(private val context: Context) {
             "tBodyGyroJerkMag" to calculateMagnitude(jerkGyroX, jerkGyroY, jerkGyroZ),
         )
 
-        // 4. 时域特征提取 (占位符实现，请完善所有 17 种特征)
+        // 4. 时域特征提取 (计算 Mean, StdDev, Max, Min, Energy)
         for ((_, signal) in timeSignals + magnitudeSignals) {
             // Mean
             featureVector[featureIndex++] = signal.average().toFloat()
             // Standard Deviation
             featureVector[featureIndex++] = calculateStdDev(signal)
+            // Max
+            featureVector[featureIndex++] = calculateMax(signal)
+            // Min
+            featureVector[featureIndex++] = calculateMin(signal)
+            // Energy
+            featureVector[featureIndex++] = calculateEnergy(signal)
 
-            // TODO: COMPLETE 更多的统计特征 (例如 Max, Min, IQR, Energy, Skewness, Kurtosis)
+            // TODO: COMPLETE 剩余的统计特征 (例如 IQR, Skewness, Kurtosis, Correlation)
+            // 目前每个信号 5 维特征，共 20 个信号 = 100 维特征
         }
 
-        // TODO: COMPLETE 频域特征提取 (需要进行 FFT 变换)
-        // val freqSignals = calculateFFT(timeSignals)
-        // for ((_, signal) in freqSignals) {
-        //     // 提取频域特征 (例如 Mean, StdDev, Weighted Average, Max Index)
-        //     featureVector[featureIndex++] = signal.average().toFloat()
-        // }
+        // 5. TODO: COMPLETE 频域特征提取 (需要进行 FFT 变换)
 
-        // TODO: COMPLETE 角度特征提取
-        // featureVector[featureIndex++] = calculateAngle(timeSignals["tBodyAccMeanX"]!!, timeSignals["tGravityAccMeanX"]!!)
+        // 6. 角度特征提取 (共 7 维)
+        // 角度特征的输入通常是窗口内信号的平均向量
+        val meanBodyAccX = buffer.map { it.bodyAccX }.average().toFloat()
+        val meanBodyAccY = buffer.map { it.bodyAccY }.average().toFloat()
+        val meanBodyAccZ = buffer.map { it.bodyAccZ }.average().toFloat()
+
+        val meanGravityAccX = buffer.map { it.gravityAccX }.average().toFloat()
+        val meanGravityAccY = buffer.map { it.gravityAccY }.average().toFloat()
+        val meanGravityAccZ = buffer.map { it.gravityAccZ }.average().toFloat()
+
+        // angle(tBodyAccMean, gravity)
+        featureVector[featureIndex++] = calculateAngle(
+            meanBodyAccX, meanBodyAccY, meanBodyAccZ,
+            meanGravityAccX, meanGravityAccY, meanGravityAccZ
+        )
+
+        // TODO: COMPLETE 剩余 6 个角度特征的计算
+        // angle(tBodyAccJerkMean), angle(tBodyGyroMean), angle(tBodyGyroJerkMean) etc.
 
         Log.d(TAG, "Features calculated. Current index: $featureIndex (Goal: 561)")
 
-        // 5. 返回完整的特征向量 (结构上匹配 TFLite 模型输入)
+        // 7. 返回完整的特征向量 (结构上匹配 TFLite 模型输入)
         return featureVector
     }
 
@@ -213,6 +233,47 @@ class HarProcessor(private val context: Context) {
         val mean = signal.average()
         val variance = signal.map { (it - mean) * (it - mean) }.average()
         return sqrt(variance.toFloat())
+    }
+
+    /**
+     * 计算最大值 (Max)
+     */
+    private fun calculateMax(signal: List<Float>): Float {
+        return signal.maxOrNull() ?: 0f
+    }
+
+    /**
+     * 计算最小值 (Min)
+     */
+    private fun calculateMin(signal: List<Float>): Float {
+        return signal.minOrNull() ?: 0f
+    }
+
+    /**
+     * 计算能量 (Energy): 窗口内所有值的平方和的平均值
+     */
+    private fun calculateEnergy(signal: List<Float>): Float {
+        if (signal.isEmpty()) return 0f
+        val sumOfSquares = signal.sumOf { (it * it).toDouble() }
+        return sumOfSquares.toFloat() / signal.size
+    }
+
+    /**
+     * 计算两个向量之间的角度 (通常用于计算 tBodyAccMean 和 Gravity 之间的角度)
+     */
+    private fun calculateAngle(ax: Float, ay: Float, az: Float, bx: Float, by: Float, bz: Float): Float {
+        val dotProduct = (ax * bx) + (ay * by) + (az * bz)
+        val magA = sqrt(ax * ax + ay * ay + az * az)
+        val magB = sqrt(bx * bx + by * by + bz * bz)
+
+        if (magA == 0f || magB == 0f) return 0f
+
+        val cosTheta = dotProduct / (magA * magB)
+        // 确保值在 [-1, 1] 范围内以避免 acos 错误
+        val safeCosTheta = cosTheta.coerceIn(-1f, 1f)
+
+        // 返回弧度值
+        return kotlin.math.acos(safeCosTheta)
     }
 
 
