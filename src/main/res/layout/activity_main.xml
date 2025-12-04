@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#F8F9FA"
+    tools:context=".MainActivity">
+
+    <!-- 标题 -->
+    <TextView
+        android:id="@+id/tv_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="实时人类活动识别 (50Hz)"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColor="#3F51B5"
+        android:gravity="center"
+        android:layout_marginBottom="16dp"/>
+
+    <!-- 实时活动状态 -->
+    <androidx.cardview.widget.CardView
+        xmlns:card_view="http://schemas.android.com/apk/res-auto"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        card_view:cardCornerRadius="12dp"
+        card_view:cardElevation="6dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp"
+            android:background="#E8EAF6">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="当前识别活动："
+                android:textSize="18sp"
+                android:textColor="#3F51B5"/>
+
+            <TextView
+                android:id="@+id/tv_current_activity"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="等待开始..."
+                android:textSize="36sp"
+                android:textStyle="bold"
+                android:textColor="#FF9800"
+                android:layout_marginTop="8dp"/>
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- 传感器数据显示区域 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:background="#FFFFFF"
+        android:elevation="4dp"
+        android:layout_marginBottom="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="原始传感器数据 (50Hz)"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#4CAF50"/>
+
+        <TextView
+            android:id="@+id/tv_acc_data"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:fontFamily="monospace"
+            android:text="加速度 (m/s²): X=0.00, Y=0.00, Z=0.00"
+            android:textSize="14sp"
+            android:textColor="#212121"/>
+
+        <TextView
+            android:id="@+id/tv_gyro_data"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="monospace"
+            android:text="角速度 (rad/s): X=0.00, Y=0.00, Z=0.00"
+            android:textSize="14sp"
+            android:textColor="#212121"/>
+
+        <TextView
+            android:id="@+id/tv_sampling_rate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:fontFamily="monospace"
+            android:text="实际频率: 0.00 Hz"
+            android:textSize="14sp"
+            android:textColor="#9E9E9E"/>
+
+    </LinearLayout>
+
+    <!-- 控制按钮 -->
+    <Button
+        android:id="@+id/btn_start_service"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="开始识别 (启动 50Hz 服务)"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#4CAF50"
+        android:padding="12dp"
+        android:textSize="18sp"
+        android:layout_marginBottom="8dp"/>
+
+    <Button
+        android:id="@+id/btn_stop_service"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="停止识别 (停止服务)"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#F44336"
+        android:padding="12dp"
+        android:textSize="18sp"
+        android:enabled="false"/>
+
+</LinearLayout>
