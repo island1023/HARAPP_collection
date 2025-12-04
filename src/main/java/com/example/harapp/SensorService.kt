@@ -13,6 +13,16 @@ import android.os.Looper
 import android.util.Log
 import kotlin.math.sqrt
 
+
+/**
+ * 【新增】用于收集原始传感器数据和对应时间戳的结构
+ */
+data class RawSensorData(
+    val timestampMs: Long,
+    val accX: Float, val accY: Float, val accZ: Float,
+    val gyroX: Float, val gyroY: Float, val gyroZ: Float,
+    val activityLabel: String
+)
 /**
  * SensorService 是一个后台服务，用于以 50Hz 的稳定速率采集加速度计和陀螺仪数据。
  * UCI HAR 数据集要求 50Hz 采样，对应 20,000 微秒 (μs) 的延迟。
@@ -44,6 +54,16 @@ class SensorService : Service(), SensorEventListener {
     // TFLite 模型推理和特征提取的处理器（现在使用非简化版）
     private lateinit var harProcessor: HarProcessor
 
+    /**
+     * 【新增】静态数据缓冲区和导出动作常量
+     */
+    companion object {
+        // 使用 volatile 确保跨线程的可见性
+        @JvmStatic
+        val collectedData = mutableListOf<RawSensorData>()
+        const val ACTION_SAVE_DATA = "com.example.harapp.ACTION_SAVE_DATA"
+    }
+
     override fun onCreate() {
         super.onCreate()
         Log.d("HAR_SERVICE", "Service created, initializing sensors.")
@@ -56,7 +76,16 @@ class SensorService : Service(), SensorEventListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 【修改】新增处理数据导出指令的逻辑
+        if (intent?.action == ACTION_SAVE_DATA) {
+            saveCollectedData()
+            // 如果只是导出数据，保持服务运行状态
+            return START_STICKY
+        }
+
         registerSensors()
+        // 【新增】在服务启动时清空旧数据，开始新的采集周期
+        collectedData.clear()
         return START_STICKY // 服务被杀死后尝试重启
     }
 
@@ -90,6 +119,9 @@ class SensorService : Service(), SensorEventListener {
 
     override fun onSensorChanged(event: SensorEvent) {
         val sensorType = event.sensor.type
+
+        // 【新增】获取系统时间戳 (毫秒) 用于记录数据
+        val currentTimestampMs = System.currentTimeMillis()
 
         when (sensorType) {
             Sensor.TYPE_ACCELEROMETER -> {
@@ -128,6 +160,19 @@ class SensorService : Service(), SensorEventListener {
 
         // 3. 将数据传递给处理器和主界面
         harProcessor.processData(latestData)
+
+        // 【新增】将原始数据和活动标签添加到缓冲区
+        // 记录原始数据 + 活动标签
+        collectedData.add(
+            RawSensorData(
+                timestampMs = currentTimestampMs,
+                accX = latestData.accX, accY = latestData.accY, accZ = latestData.accZ,
+                gyroX = latestData.gyroX, gyroY = latestData.gyroY, gyroZ = latestData.gyroZ,
+                // 仅记录活动名称（去除置信度百分比和/或规则标记）
+                activityLabel = harProcessor.currentActivity.substringBefore(' ')
+            )
+        )
+
         sendBroadcastToActivity()
     }
 
@@ -154,6 +199,41 @@ class SensorService : Service(), SensorEventListener {
         if (accCount > 100) { accCount = 0; accTotalDelta = 0L; }
         if (gyroCount > 100) { gyroCount = 0; gyroTotalDelta = 0L; }
     }
+
+    /**
+     * 【新增】调用 DataExporter 来执行数据保存操作
+     */
+    private fun saveCollectedData() {
+        Log.d("HAR_SERVICE", "Starting data save process. Collected ${collectedData.size} samples.")
+
+        // 如果没有数据，直接发送失败广播
+        if (collectedData.isEmpty()) {
+            val saveIntent = Intent(MainActivity.ACTION_SENSOR_UPDATE)
+            saveIntent.putExtra("SAVE_STATUS", "FAILURE")
+            saveIntent.putExtra("MESSAGE", "没有数据可保存。")
+            sendBroadcast(saveIntent)
+            return
+        }
+
+        // 调用 DataExporter 异步执行保存操作
+        DataExporter(this).exportData(collectedData) { success, filePath ->
+            // 在保存完成后发送广播通知 MainActivity
+            val saveIntent = Intent(MainActivity.ACTION_SENSOR_UPDATE)
+            if (success) {
+                Log.i("HAR_SERVICE", "Data saved successfully to: $filePath")
+                saveIntent.putExtra("SAVE_STATUS", "SUCCESS")
+                saveIntent.putExtra("FILE_PATH", filePath)
+                // 清空数据以便新的收集周期
+                collectedData.clear()
+            } else {
+                Log.e("HAR_SERVICE", "Failed to save data.")
+                saveIntent.putExtra("SAVE_STATUS", "FAILURE")
+                saveIntent.putExtra("MESSAGE", "写入文件失败。")
+            }
+            sendBroadcast(saveIntent)
+        }
+    }
+
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
         // 传感器精度变化时调用

@@ -27,6 +27,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvSamplingRate: TextView
     private lateinit var btnStartService: Button
     private lateinit var btnStopService: Button
+    // 【新增】数据导出按钮
+    private lateinit var btnExportData: Button
 
     private var isServiceRunning = false
 
@@ -40,6 +42,17 @@ class MainActivity : AppCompatActivity() {
     private val sensorDataReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_SENSOR_UPDATE) {
+                // 【新增】处理数据保存状态反馈
+                val saveStatus = intent.getStringExtra("SAVE_STATUS")
+                if (saveStatus == "SUCCESS") {
+                    val filePath = intent.getStringExtra("FILE_PATH")
+                    // 提示用户文件保存的位置
+                    Toast.makeText(context, "数据保存成功，位于: ${filePath?.substringAfterLast('/')}", Toast.LENGTH_LONG).show()
+                } else if (saveStatus == "FAILURE") {
+                    val message = intent.getStringExtra("MESSAGE") ?: "写入文件失败。"
+                    Toast.makeText(context, "数据保存失败! $message", Toast.LENGTH_SHORT).show()
+                }
+
                 // 提取传感器数据
                 val accX = intent.getFloatExtra("ACC_X", 0f)
                 val accY = intent.getFloatExtra("ACC_Y", 0f)
@@ -58,10 +71,12 @@ class MainActivity : AppCompatActivity() {
                 tvCurrentActivity.text = activity
 
                 // 根据活动调整颜色 (简单图形化反馈)
-                when (activity) {
-                    "走路" -> tvCurrentActivity.setTextColor(ContextCompat.getColor(context!!, android.R.color.holo_blue_dark))
+                // 【修改】使用 substringBefore(' ') 来处理模型输出中可能包含的置信度，以便进行颜色匹配。
+                when (activity.substringBefore(' ')) {
+                    "WALKING", "走路" -> tvCurrentActivity.setTextColor(ContextCompat.getColor(context!!, android.R.color.holo_blue_dark))
+                    "WALKING_UPSTAIRS", "WALKING_DOWNSTAIRS" -> tvCurrentActivity.setTextColor(ContextCompat.getColor(context!!, android.R.color.holo_blue_light))
+                    "SITTING", "STANDING", "LAYING", "站立/静止" -> tvCurrentActivity.setTextColor(ContextCompat.getColor(context!!, android.R.color.holo_green_dark))
                     "跑步/跳跃" -> tvCurrentActivity.setTextColor(ContextCompat.getColor(context!!, android.R.color.holo_red_dark))
-                    "站立/静止" -> tvCurrentActivity.setTextColor(ContextCompat.getColor(context!!, android.R.color.holo_green_dark))
                     else -> tvCurrentActivity.setTextColor(ContextCompat.getColor(context!!, android.R.color.darker_gray))
                 }
             }
@@ -79,6 +94,8 @@ class MainActivity : AppCompatActivity() {
         tvSamplingRate = findViewById(R.id.tv_sampling_rate)
         btnStartService = findViewById(R.id.btn_start_service)
         btnStopService = findViewById(R.id.btn_stop_service)
+        // 【新增】初始化数据导出按钮
+        btnExportData = findViewById(R.id.btn_export_data)
 
         // 设置按钮点击事件
         btnStartService.setOnClickListener {
@@ -91,6 +108,11 @@ class MainActivity : AppCompatActivity() {
 
         btnStopService.setOnClickListener {
             stopSensorService()
+        }
+
+        // 【新增】设置数据导出按钮点击事件
+        btnExportData.setOnClickListener {
+            exportCollectedData()
         }
 
         updateButtonsState()
@@ -153,6 +175,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * 【新增】发送指令给 SensorService 导出数据
+     */
+    private fun exportCollectedData() {
+        if (isServiceRunning) {
+            // 检查是否有数据可以导出
+            if (SensorService.collectedData.isEmpty()) {
+                Toast.makeText(this, "当前缓冲区没有采集到的数据。", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val intent = Intent(this, SensorService::class.java).apply {
+                action = SensorService.ACTION_SAVE_DATA
+            }
+            // 通过发送一个带 action 的 Intent 来触发 SensorService 中的数据保存逻辑
+            startService(intent)
+            Toast.makeText(this, "正在导出数据，请稍候...", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "请先启动传感器服务!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
      * 检查所需的权限 (例如后台服务运行)
      */
     private fun checkPermissions(): Boolean {
@@ -195,5 +239,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateButtonsState() {
         btnStartService.isEnabled = !isServiceRunning
         btnStopService.isEnabled = isServiceRunning
+        // 【修改】导出按钮只有在服务运行时才启用
+        btnExportData.isEnabled = isServiceRunning
     }
 }

@@ -126,6 +126,17 @@
         android:backgroundTint="#F44336"
         android:padding="12dp"
         android:textSize="18sp"
-        android:enabled="false"/>
+        android:enabled="false"
+        android:layout_marginBottom="8dp"/> <Button
+    android:id="@+id/btn_export_data"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="导出采集数据"
+    android:textColor="#FFFFFF"
+    android:backgroundTint="#03A9F4"
+    android:padding="12dp"
+    android:textSize="18sp"
+    android:enabled="false"/>
+
 
 </LinearLayout>
