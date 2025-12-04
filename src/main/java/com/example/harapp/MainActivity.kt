@@ -2,10 +2,11 @@ package com.example.harapp
 
 import android.Manifest
 import android.content.BroadcastReceiver
-import android.content.Context
+import android.content.Context // 确保 Context 被导入
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.Build // 确保 Build 被导入
 import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
@@ -95,11 +96,25 @@ class MainActivity : AppCompatActivity() {
         updateButtonsState()
     }
 
+    // 【最终修复】应用 LINT 抑制，解决 RECEIVER_EXPORTED/NOT_EXPORTED 标志缺失的报错
+    // "InlinedApi" 抑制对 Context.RECEIVER_NOT_EXPORTED 的常量引用的兼容性报错。
+    // "UnspecifiedRegisterReceiverFlag" 抑制 LINT 对 2 参数 registerReceiver 的警告。
+    @Suppress("InlinedApi", "UnspecifiedRegisterReceiverFlag", "DEPRECATION")
     override fun onResume() {
         super.onResume()
         // 注册广播接收器，用于接收传感器数据更新
         val filter = IntentFilter(ACTION_SENSOR_UPDATE)
-        registerReceiver(sensorDataReceiver, filter, RECEIVER_EXPORTED)
+
+        // API 兼容性处理
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Android 13 (API 33) 及以上：使用新的 3 参数方法。
+            // Context.RECEIVER_NOT_EXPORTED 是 API 33 引入的常量，用于私有广播，是最佳安全实践。
+            registerReceiver(sensorDataReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            // Android 12 (API 32) 及以下：使用兼容的 2 参数方法。
+            // LINT 警告被 @Suppress 注解在方法级别抑制。
+            registerReceiver(sensorDataReceiver, filter)
+        }
     }
 
     override fun onPause() {
